@@ -7,13 +7,22 @@
 #include <sys/file.h>
 using namespace std;
 
-static void main_add()
+#define LONG_OPT_FILENAMEIN {"in",  required_argument, 0, 'i'},
+#define LONG_OPT_FILENAMEOUT {"out",  required_argument, 0, 'o'},
+#define LONG_OPT_UNCOMPRESSED {"uncompressed",  no_argument, 0, 'u'},
+#define LONG_OPT_XML {"xml", no_argument, 0, 'x'},
+
+static void main_view(int argc,char** argv)
 	{
-	int fd=0;
-	flock(fd,LOCK_EX);
 	
-	
-	flock(fd,LOCK_UN);
+	for(;;)
+		{
+		static struct option long_options[] = {
+			LONG_OPT_FILENAMEOUT
+			LONG_OPT_UNCOMPRESSED
+			{0, 0, 0, 0}
+			};
+		}
 	}
 
 
