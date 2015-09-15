@@ -51,6 +51,46 @@ class DefaultStore : public AbstractStore, public std::set<Statement>
 			::xmlFreeDoc(dom);
 			return *this;
 			}
+		xmlDocPtr toDom()
+			{
+			xmlDocPtr res;
+   			xmlNsPtr rdf;
+			res = xmlNewDoc("1.0");
+			res->xmlRootNode = xmlNewDocNode(res, NULL, "RDF", NULL);
+			rdf = xmlNewNs(res->xmlRootNode, "http://www.w3.org/TR/WD-rdf-syntax#", "RDF");
+			rdf = xmlNewNs(res->xmlRootNode, "http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf");
+			xmlSetNs(res->xmlRootNode, rdf);
+			std::set<Statement>::const_iterator r=begin();
+			std::set<Statement>::const_iterator r_end=end();
+			while(r!=r_end)
+				{
+				std::set<Statement>::const_iterator r_next=r;
+				xmlNodePtr subjetNode = ::xmlNewNode();
+				if(r->subject()->is_anon())
+					{
+					}
+				else
+					{
+					::xmlSetNsProp(
+						subjetNode,
+						
+						RDF_NS,
+						BAD_CAST "about"
+						);
+					}
+				while(r_next!=r_end && 
+					  r->subject()->equals(r_next->subject()))
+					{
+					
+					++r_next;
+					}
+				
+				xmlAddChild(res->xmlRootNode,subjetNode);
+				r=r_next;
+				}
+			return res;
+			}
+		
 		DefaultStore& n3(std::ostream& out)
 			{
 			std::set<Statement>::const_iterator r=begin();

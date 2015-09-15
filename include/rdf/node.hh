@@ -231,6 +231,9 @@ class Statement
 			out << " ." << std::endl;
 			return out;
 			}
+		const Resource* subject() { return o;}
+		const Resource* predicate() { return o;}
+		const RDFNode* object() { return o;}
 	};
 
 #endif
