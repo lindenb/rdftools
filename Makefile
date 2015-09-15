@@ -1,31 +1,25 @@
-.PHONY:all
+.PHONY:all tests
 CC=g++
 XML_CONFIG=xml2-config
-CFLAGS= -O3 -Wall `$(XML_CONFIG) --cflags`
+CFLAGS= -O3 -Wall -Iinclude `$(XML_CONFIG) --cflags`
 LDFLAGS= `$(XML_CONFIG) --libs`
 
-all: 
+all: tests
 
-rdftool: rdftool.o
+a.out : test.cpp 
 	$(CC) -o $@ $(CFLAGS) $^ $(LDFLAGS)
 
-node.o: node.cpp node.hh
-	$(CC) -o $@ -c $(CFLAGS) $<	
-
-prefix_mapping.o : prefix_mapping.cpp prefix_mapping.hh ns.hh
-	$(CC) -o $@ -c $(CFLAGS) $<
-
-ns.o : ns.cpp ns.hh
-	$(CC) -o $@ -c $(CFLAGS) $<
+tests: test/w3c/xmlbase/test013.rdf a.out
+	find test/w3c -name "*.rdf" -print -exec ./a.out '{}' ';'
 
 
-
-
-rdftool.o : rdftool.cpp
-	$(CC) -o $@ -c $(CFLAGS) $<
-
-rdf.o : rdf.cpp rdf.hh
-	$(CC) -o $@ -c $(CFLAGS) $<
+test/w3c/xmlbase/test013.rdf:
+	rm -rf test/w3c TESTS.zip
+	mkdir -p test/w3c
+	wget -O TESTS.zip "http://www.w3.org/2013/RDFXMLTests/TESTS.zip"
+	unzip -d  test/w3c TESTS.zip
+	rm TESTS.zip
+	find test/w3c -type f -name ".*.rdf" -delete
 
 clean:
-	rm -f *.o 
+	rm -f *.o  test/w3c
