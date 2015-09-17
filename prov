@@ -1,0 +1,144 @@
+#!/bin/bash
+set -euf -o pipefail
+
+DC="http://purl.org/dc/elements/1.1/"
+NAMESPACE="http://u1087.univ-nantes.fr/"
+PREFIX="my"
+PRE_PROCESS="0"
+POST_PROCESS="0"
+RAPPER_BIN="rapper"
+RDFPROC_BIN="rdfproc"
+declare -a CUSTOMTRIPLES
+
+function warning
+	{
+	echo "[Prov:Warning] $1" 1>&2
+	}
+
+function die
+	{
+	echo "[Prov:Error] $1" 1>&2
+    exit -1
+	}
+#
+# http://stackoverflow.com/questions/3915040
+#
+function abspath
+	{
+	echo -n "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+	}
+
+function add_stmt
+	{
+	local tmpfile="${1}.tmp${RANDOM}"
+	local rdfprocparam="--quiet --storage file ${tmpfile}"
+	
+	if [ ! -f "${1}" ]; then
+    	die "File ${1} not found!"
+	fi
+	
+	${RDFPROC_BIN}  ${rdfprocparam}  parse "$1"
+	
+	if [ "$#" -eq 4 ]
+	then
+		${RDFPROC_BIN} ${rdfprocparam}  add "$2" "$3" "$4"	
+	elif [ "$#" -eq 6 ]
+	then
+		${RDFPROC_BIN} ${rdfprocparam} add-typed "$2" "$3" "$4" "$5" "$6"
+	else
+		rm "${tmpfile}"
+		die "add_stmt:Illegal number of arguments '$#' : '$@'"
+	fi
+
+ 	"${RAPPER_BIN}" --output rdfxml-abbrev --quiet "${tmpfile}" > "${1}"
+	rm "${tmpfile}"
+	}
+
+function process_custom_triples
+	{
+	local i=0
+	for ((i=0; i<${#CUSTOMTRIPLES[*]}; i++));
+	do
+		echo "S:" ${CUSTOMTRIPLES[i]}
+		((i++))
+		echo "P:" ${CUSTOMTRIPLES[i]}
+		((i++))
+		echo "O:" ${CUSTOMTRIPLES[i]}
+	done
+	}
+
+function run_pre
+	{
+	local path="$(abspath $1).rdf"
+	local tmppath="${path}~"
+	local currdir="$(pwd)"
+	warning ${path}
+	echo -e "@prefix  dc: <${DC}> .\n@prefix  ${PREFIX}: <${NAMESPACE}> .\n<file://${path}> a  ${PREFIX}:File ." | "${RAPPER_BIN}" --output rdfxml-abbrev --quiet --input-uri "file://${currdir}"  -i turtle  - > "${tmppath}"
+	add_stmt "${tmppath}" "file://${path}" "${NAMESPACE}creation" "$(date +'%Y%M%d%H%M%S')"
+	
+	 process_custom_triples
+	
+	mv "${tmppath}" "${path}"
+	}	
+	
+function prov
+	{
+	echo $1
+	if [ "${PRE_PROCESS}" -eq 1 ] &&  [ "${POST_PROCESS}" -eq 1 ]; then
+    	die "both --pre and --post defined."
+	fi
+	
+	if [ "${PRE_PROCESS}" -eq 1 ] ; then
+    	run_pre $1
+    	return
+	fi
+	
+	}
+
+while [[ $# > 1 ]]
+do
+key="$1"
+case $key in
+    --)
+    shift
+    break
+    ;;
+    -B|--pre)
+    PRE_PROCESS="1"
+    shift # past argument
+    ;;
+    --rapper)
+    RAPPER_BIN="$2"
+    shift
+    shift
+    ;;
+    --rapper)
+    RDFPROC_BIN="$2"
+    shift
+    shift
+    ;;
+     --stmt)
+    CUSTOMTRIPLES+=("$2")
+    CUSTOMTRIPLES+=("$3")
+    CUSTOMTRIPLES+=("$4")
+    shift
+    shift
+    shift
+    shift
+    ;;
+    *)
+    break
+    ;;
+esac
+done
+
+if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters"
+    ##exit -1
+fi
+
+for f in $*
+do
+  echo "Processing ${f} $# file..."
+  prov "${f}"
+done
