@@ -9,6 +9,7 @@ POST_PROCESS="0"
 RAPPER_BIN="rapper"
 RDFPROC_BIN="rdfproc"
 declare -a CUSTOMTRIPLES
+declare -a PREREQUISITES 
 
 function warning
 	{
@@ -28,13 +29,16 @@ function abspath
 	echo -n "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 	}
 
+#
+# arg 1 : rdffile
+#
 function add_stmt
 	{
 	local tmpfile="${1}.tmp${RANDOM}"
 	local rdfprocparam="--quiet --storage file ${tmpfile}"
 	
 	if [ ! -f "${1}" ]; then
-    	die "File ${1} not found!"
+    	die "Add statement: File ${1} not found!"
 	fi
 	
 	${RDFPROC_BIN}  ${rdfprocparam}  parse "$1"
@@ -44,6 +48,7 @@ function add_stmt
 		${RDFPROC_BIN} ${rdfprocparam}  add "$2" "$3" "$4"	
 	elif [ "$#" -eq 6 ]
 	then
+		echo ">>>" "$2" "$3" "$4" "$5" "$6"
 		${RDFPROC_BIN} ${rdfprocparam} add-typed "$2" "$3" "$4" "$5" "$6"
 	else
 		rm "${tmpfile}"
@@ -54,45 +59,83 @@ function add_stmt
 	rm "${tmpfile}"
 	}
 
+#
+# arg 1 : rdffile
+# arg 2 : subject-uri
+#
 function process_custom_triples
 	{
-	local i=0
-	for ((i=0; i<${#CUSTOMTRIPLES[*]}; i++));
+	local path="$(abspath $2)"
+	for ((i=0; i<${#CUSTOMTRIPLES[*]}; i+=2));
 	do
-		echo "S:" ${CUSTOMTRIPLES[i]}
-		((i++))
-		echo "P:" ${CUSTOMTRIPLES[i]}
-		((i++))
-		echo "O:" ${CUSTOMTRIPLES[i]}
+		add_stmt "${1}" "file://${path}" ${CUSTOMTRIPLES[i]} ${CUSTOMTRIPLES[i+1]}
 	done
+	
+	for i in "${PREREQUISITES[@]}"
+	do
+		read -a deps <<< "${i}"
+		for j in "${deps[@]}"
+		do
+			local deppath="$(abspath ${j})"
+	
+			add_stmt "${1}" "file://${path}" "${NAMESPACE}hasPrerequisites" "file://${deppath}"
+		done
+	
+	done
+	
 	}
 
-function run_pre
+function process_start_file
 	{
-	local path="$(abspath $1).rdf"
-	local tmppath="${path}~"
-	local currdir="$(pwd)"
-	warning ${path}
-	echo -e "@prefix  dc: <${DC}> .\n@prefix  ${PREFIX}: <${NAMESPACE}> .\n<file://${path}> a  ${PREFIX}:File ." | "${RAPPER_BIN}" --output rdfxml-abbrev --quiet --input-uri "file://${currdir}"  -i turtle  - > "${tmppath}"
-	add_stmt "${tmppath}" "file://${path}" "${NAMESPACE}creation" "$(date +'%Y%M%d%H%M%S')"
+	local path="$(abspath $1)"
+	local rdffile="${path}.rdf"
+	local currdir="$(dirname ${path})"
 	
-	 process_custom_triples
-	
-	mv "${tmppath}" "${path}"
-	}	
-	
+	echo -e "@prefix  dc: <${DC}> .\n@prefix  ${PREFIX}: <${NAMESPACE}> .\n<file://${path}> a  ${PREFIX}:File ." |\
+		"${RAPPER_BIN}" --output rdfxml-abbrev --quiet --input-uri "file://${currdir}"  -i turtle  - > "${rdffile}"
+	add_stmt "${rdffile}" "file://${path}" "${NAMESPACE}start" "$(date +'%Y-%M-%dT%H:%M:%S')" "en" "http://www.w3.org/2001/XMLSchema#dateTime"
+	add_stmt "${rdffile}" "file://${path}" "${NAMESPACE}author" "${NAMESPACE}users/$(whoami)"
+	}
+
+
+function process_finished_file
+	{
+	local path="$(abspath $1)"
+	local rdffile="${path}.rdf"
+
+	if [ ! -f "${path}" ]; then
+    	warning "Src File ${path} not found!"
+	else
+		add_stmt "${rdffile}" "file://${path}" "${NAMESPACE}end" "$(date --reference=${path} +'%Y-%M-%dT%H:%M:%S')" "en" "http://www.w3.org/2001/XMLSchema#dateTime"
+		add_stmt "${rdffile}" "file://${path}" "${NAMESPACE}sha" "$(sha1sum "${path}" | cut -d ' ' -f1)"
+		add_stmt "${rdffile}" "file://${path}" "${NAMESPACE}size" "$(stat --printf="%s" ${path})"
+	fi
+	}
+
 function prov
 	{
-	echo $1
+	local path="$(abspath $1)"
+	local rdffile="${path}.rdf"
+	local tmppath="${rdffile}~"
+	
 	if [ "${PRE_PROCESS}" -eq 1 ] &&  [ "${POST_PROCESS}" -eq 1 ]; then
     	die "both --pre and --post defined."
 	fi
 	
 	if [ "${PRE_PROCESS}" -eq 1 ] ; then
-    	run_pre $1
+		process_start_file "$1"
+		process_custom_triples "${rdffile}" "$1"
+    	return
+	fi
+	if [ "${POST_PROCESS}" -eq 1 ] ; then
+		process_finished_file "$1"
+		process_custom_triples "${rdffile}" "$1"
     	return
 	fi
 	
+	process_start_file "$1"
+	process_finished_file "$1"
+	process_custom_triples "${rdffile}" "$1"
 	}
 
 while [[ $# > 1 ]]
@@ -120,12 +163,15 @@ case $key in
      --stmt)
     CUSTOMTRIPLES+=("$2")
     CUSTOMTRIPLES+=("$3")
-    CUSTOMTRIPLES+=("$4")
-    shift
     shift
     shift
     shift
     ;;
+    -d|--prerequisites)
+    PREREQUISITES+=("$2")
+    shift
+    shift
+    ;;   
     *)
     break
     ;;
