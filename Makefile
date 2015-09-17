@@ -2,21 +2,16 @@ SHELL=/bin/bash
 this.makefile=$(lastword $(MAKEFILE_LIST))
 this.dir=$(dir $(realpath ${this.makefile}))
 
-.PHONY:all tests
+.PHONY:all tests redland.libs
 CC=g++
 XML_CONFIG=xml2-config
-CFLAGS= -O3 -Wall -Iinclude `$(XML_CONFIG) --cflags`
-LDFLAGS= `$(XML_CONFIG) --libs`
+CFLAGS= -std=c++0x -O3 -Wall -Iinclude `ext/redland/bin/redland-config --cflags`
+LDFLAGS= `ext/redland/bin/redland-config --libs`
 
-all: tests
+all: a.out
 
-a.out : test.cpp 
-	$(CC) -o $@ $(CFLAGS) $^ $(LDFLAGS)
-
-tests: test/w3c/xmlbase/test013.rdf a.out
-	find test/w3c -name "*.rdf" -print -exec ./a.out '{}' ';'
-
-
+a.out : test.cpp redland.libs
+	$(CC) -o $@ $(CFLAGS) $< $(LDFLAGS)
 
 raptor.version=2.0.15
 
@@ -37,12 +32,14 @@ ext/rasqal/bin/roqet : ext/raptor2/bin/rapper
 
 
 redland.version=1.0.16
-ext/redland/bin/rdfproc : ext/rasqal/bin/roqet
+ext/redland/bin/redland-config : ext/rasqal/bin/roqet
 	mkdir -p ext/redland
 	rm -rf ext/redland/redland-${redland.version} ext/redland/redland-${redland.version}.tar.gz
 	wget -O ext/redland/redland-${redland.version}.tar.gz "http://download.librdf.org/source/redland-${redland.version}.tar.gz"
 	(cd ext/redland && tar xvfz redland-${redland.version}.tar.gz && cd redland-${redland.version} && PKG_CONFIG_PATH=${this.dir}ext/raptor2/lib/pkgconfig:${this.dir}ext/rasqal/lib/pkgconfig RAPTOR2_CFLAGS=" -I${this.dir}ext/raptor2/include -I${this.dir}ext/raptor2/include/raptor2 " RAPTOR2_LIBS=" -L${this.dir}ext/raptor2/lib -lraptor2 " ./configure --prefix=${this.dir}/ext/redland && make && make install)
 	rm ext/redland/redland-${redland.version}.tar.gz
+
+redland.libs: ext/redland/bin/rdfproc 
 
 clean:
 	rm -f *.o  ext

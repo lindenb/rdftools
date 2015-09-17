@@ -23,6 +23,7 @@ class DomParser
 			return hasNs(node,uri) && hasLocalName(node,name);
 			}
 	public:
+		PrefixMapping prefixMapping;
 		DomParser()
 			{
 			
@@ -32,6 +33,11 @@ class DomParser
 		
 		
 	private:
+		void _namespaces(xmlNodePtr root)
+			{
+			prefixMapping.read(root);
+			}
+	
 		void visit(const Resource* s,const Resource* p,const RDFNode* o)
 			{
 			Statement stmt(s,p,o);
@@ -61,7 +67,7 @@ class DomParser
 			{
 			auto_xmlstr parseType(xmlGetNsProp(property,BAD_CAST "parseType", RDF_NS));
 			auto_xmlstr dataTypeNode(xmlGetNsProp(property,BAD_CAST "dataType", RDF_NS));
-			
+			_namespaces(property);	
 		
 			if(property->ns == 0)
 				{
@@ -245,7 +251,6 @@ class DomParser
 		
 		std::auto_ptr<Resource> parseResource(xmlNodePtr root,const char* base)
 			{
-			std::cerr << "IN " << root->name << std::endl;
 			std::auto_ptr<Resource> rsrc;
 			auto_xmlstr aboutAtt(xmlGetNsProp(root,BAD_CAST"about",BAD_CAST RDF_NS));
 			auto_xmlstr ID(xmlGetNsProp(root,BAD_CAST"ID",BAD_CAST RDF_NS));
@@ -325,6 +330,8 @@ class DomParser
 			xmlNodePtr	root = xmlDocGetRootElement(dom);
 			if(root==0) THROW("root is null");
 			if(!is_a(root,RDF_NS, "RDF")) THROW("not a RDF root");
+			_namespaces(root);
+			
 			for(xmlNodePtr c = root->xmlChildrenNode; c!=NULL;c=c->next)
 				{
 				if(c->type==XML_ELEMENT_NODE)

@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <ctime>
-#include "rdf/xml.hh"
+#include "rdf/prefixmapping.hh"
 
 
 class RDFNode
@@ -18,6 +18,10 @@ class RDFNode
 		virtual int compare(const RDFNode* cp) const=0;
 		virtual RDFNode* clone() const =0;
 		virtual std::ostream& n3(std::ostream& out) const=0;
+		virtual bool equals(const RDFNode* cp) const
+			{
+			return compare(cp)==0;
+			}
 	};
 
 class Resource : public RDFNode
@@ -89,6 +93,16 @@ class ResourceUri : public Resource
 			{
 			out << "<" << _uri.c_str() << ">";
 			return out;
+			}
+		virtual const xmlChar* localName() const
+			{
+			std::size_t h1=_uri.find_last_of('#');
+			std::size_t h2=_uri.find_last_of('/');
+			if(h1==xml_string::npos && h2==xml_string::npos)
+				{
+				return 0;
+				}
+			return &(_uri.c_str()[std::max(h1,h2)]);
 			}
 	};
 
@@ -231,9 +245,9 @@ class Statement
 			out << " ." << std::endl;
 			return out;
 			}
-		const Resource* subject() { return o;}
-		const Resource* predicate() { return o;}
-		const RDFNode* object() { return o;}
+		const Resource* subject() const { return s;}
+		const Resource* predicate() const {  return p;}
+		const RDFNode* object()  const { return o;}
 	};
 
 #endif
