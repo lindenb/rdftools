@@ -247,14 +247,7 @@ class Statement
 		virtual const Resource* predicate() const;
 		virtual const RDFNode* object() const;
 		
-		 librdf_statement* create() const
-		 	{
-		 	return librdf_new_statement_from_nodes(World::instance()->ptr(),
-		 		::librdf_new_node_from_node(subject()->ptr()),
-		 		::librdf_new_node_from_node(predicate()->ptr()),
-		 		::librdf_new_node_from_node(object()->ptr())
-		 		); 
-		 	}
+
 		
 		virtual ~Statement();
 		virtual std::string str() const;
@@ -326,30 +319,125 @@ class Parser: public wrapper< librdf_parser>
 			}
 			
 	};
+class StmtIterator: public wrapper<librdf_stream>
+	{
+	public:
+		StmtIterator():wrapper( librdf_new_empty_stream(World::instance()->ptr()),false);
+			{
+			}
+		virtual ~StmtIterator()
+			{
+			::librdf_free_stream (ptr());
+			}
+		bool hasNext() const
+			{
+			return ::librdf_stream_end (ptr());
+			}
+		Statement next() const
+			{
+			if( librdf_stream_next (ptr())!=0) THROW("cannot move");
+			return ::librdf_stream_end (ptr());
+			}
+	};
+
+
+class Model : public wrapper<librdf_model>
+	{
+	protected:
+		librdf_storage* storage;
+	
+		Model():wrapper(0,true),storage(0)
+			{
+			}
+		
+		librdf_node* safe_copy(const RDFNode* c) const
+			{
+			if(c==0) THROW("nil node");
+			librdf_node* x=::librdf_new_node_from_node(c->ptr());
+			if(x==0) THROW("Cannot copy node");
+		 	return x;
+			}	
+		
+		librdf_statement* to_statement(const Statement* stmt) const
+		 	{
+		 	 librdf_statement* x= ::librdf_new_statement_from_nodes(World::instance()->ptr(),
+		 		safe_copy(stmt->subject()),
+		 		safe_copy(stmt->predicate()),
+		 		safe_copy(stmt->object())
+		 		); 
+		 	if(x==0) THROW("Cannot convert to ibrdf_statement");
+		 	return x;
+		 	}
+	public:
+		virtual ~Model()
+			{
+			if(!nil()) librdf_free_model(ptr());
+			if(storage!=0) librdf_free_storage(storage);
+			}
+		int size() const
+			{
+			return ::librdf_model_size(ptr());
+			}
+		virtual void add(const Statement& stmt)
+			{
+			librdf_statement *statement = this->to_statement(&stmt);
+			int ret= ::librdf_model_add_statement(ptr(), statement);
+			librdf_free_statement(statement);
+			if(ret!=0) THROW("Cannot add " << stmt );
+			}
+		
+		virtual void remove(const Statement& stmt)
+			{
+			librdf_statement *statement = this->to_statement(&stmt);
+			int ret= ::librdf_model_remove_statement(ptr(), statement);
+			librdf_free_statement(statement);
+			if(ret!=0) THROW("Cannot add " << stmt );
+			}
+		
+		bool contains(const Statement& stmt)
+			{
+			librdf_statement *statement = this->to_statement(&stmt);
+			bool ret= ::librdf_model_contains_statement(ptr(), statement);
+			librdf_free_statement(statement);
+			return ret;
+			}
+		
+		virtual void add(const char* s, const char* p, const char* o)
+			{
+			ResourceUri _s(s);
+			ResourceUri _p(p);
+			if(strstr(o,"://")==NULL)
+				{
+				Literal _o(o);
+				Statement stmt(_s,_p,_o);
+				add(stmt);
+				}
+			else
+				{
+				ResourceUri _o(o);
+				Statement stmt(_s,_p,_o);
+				add(stmt);
+				}
+			}
+		
+	};
 
 
 
-class FileModel : public wrapper<librdf_model>
+class FileModel : public Model
 	{
 	private:
-		librdf_storage* storage;
+		std::string filename;
 	public:
-		FileModel(const char* filename):wrapper(0,true)
+		FileModel(const char* filename):Model(),filename(filename)
 			{
-			storage=librdf_new_storage(World::instance()->ptr(), "file", filename, NULL);
+			this->storage=librdf_new_storage(World::instance()->ptr(), "file", filename, NULL);
 			reset(::librdf_new_model(World::instance()->ptr(), storage, NULL));
+			ptr();
 			}
 		virtual ~FileModel()
 			{
-			 librdf_free_model(ptr());
-			 librdf_free_storage(storage);
-			}
-		void add(const Statement& stmt)
-			{
-			librdf_statement *statement = stmt.create();
-			int ret=librdf_model_add_statement(ptr(), statement);
-			librdf_free_statement(statement);
-			if(ret!=0) THROW("Cannot add " << stmt );
+
 			}
 		
 	};

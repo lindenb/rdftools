@@ -23,6 +23,7 @@ int main(int argc,char** argv)
 		Literal n3(i);
 		Statement stmt2(x,p,n3);
 		rdfFile.add(stmt2);
+		rdfFile.add("http://wikipedia.org", "http://x","http://google.com");
 		}
 	return 0;
 	}
