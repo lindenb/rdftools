@@ -5,13 +5,13 @@ this.dir=$(dir $(realpath ${this.makefile}))
 .PHONY:all tests redland.libs
 CC=g++
 XML_CONFIG=xml2-config
-CFLAGS= -std=c++0x -O3 -Wall -Iinclude `ext/redland/bin/redland-config --cflags`
+CFLAGS= -g -std=c++0x -O3 -Wall -Isrc `ext/redland/bin/redland-config --cflags`
 LDFLAGS= `ext/redland/bin/redland-config --libs`
 
 all: a.out
 
-a.out : test.cpp redland.libs
-	$(CC) -o $@ $(CFLAGS) $< $(LDFLAGS)
+a.out : test.cpp redland.libs src/rdf.cpp src/rdf.hh
+	$(CC) -o $@ $(CFLAGS) $(filter %.cpp,$^) $(LDFLAGS)
 
 raptor.version=2.0.15
 
