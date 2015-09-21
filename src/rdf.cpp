@@ -24,47 +24,46 @@ World::~World()
 	::librdf_free_world(ptr());
 	}
 
-		
-URI World::uri(const ucharPtr url)
-	{
-	return URI (this,url);
-	}
- Literal World::literal(const ucharPtr string, const char * xml_language, int is_wf_xml) const
-	{
-	return Literal( ::librdf_new_node_from_literal (this->ptr(),string,xml_language, is_wf_xml) ,false);
-	}
- Literal World::literal(const ucharPtr string) const
-	{
-	return literal(string,NULL,0);
-	}
- ResourceUri World::resource(const ucharPtr uri) const
-	{
-	return ResourceUri(this,uri);
-	}
+
 	
 	
-	
-URI::URI(librdf_uri* ptr):wrapper(ptr,false)
+void URI::init(const World* w,const ucharPtr url)
 	{
+	VERIFY(w!=0);
+	librdf_uri* p =  ::librdf_new_uri(w->ptr(),url);
+	VERIFY(p!=0);
+	reset(p);
+	reset_world(w);
 	}
 
-URI::URI(const ucharPtr url):wrapper( ::librdf_new_uri(World::instance()->ptr(),url),false)
+URI::URI(const World* w,librdf_uri* p):world_wrapper(w,p)
 	{
+	VERIFY(p!=0);
 	}
 
-URI::URI(const char* url):wrapper( ::librdf_new_uri(World::instance()->ptr(),(cucharPtr)url),false)
+URI::URI(const World* w,const ucharPtr url):world_wrapper()
 	{
+	init(w,url);
 	}
 
-URI::URI(const World* w,const ucharPtr url):wrapper( ::librdf_new_uri(w->ptr(),url),false)
+URI::URI(const World* w,const char* url):world_wrapper()
+	{
+	init(w,(const ucharPtr)url);
+	}
+
+URI::URI():world_wrapper()
 	{
 	}
-URI::URI():wrapper(0,true)
-	{
-	}
-URI::URI(const URI& cp):wrapper(::librdf_new_uri_from_uri(cp.ptr()),false)
+URI::URI(const URI& cp):world_wrapper(cp.world(),0)
  	{
+ 	if(!cp.nil())
+ 		{
+		librdf_uri* p =	::librdf_new_uri_from_uri(cp.ptr());
+		VERIFY(p!=0);
+		reset(p);
+		}
  	}
+ 
 URI::~URI()
 	{
 	if(!nil()) ::librdf_free_uri(ptr());	
@@ -73,9 +72,15 @@ URI& URI::operator=(const URI& cp)
 	{
 	if(this!=&cp)
 		{
-		::librdf_free_uri(ptr());	
-		reset(::librdf_new_uri_from_uri(cp.ptr()));
-		ptr();
+		if(!nil()) ::librdf_free_uri(ptr());	
+		reset(0);
+		if(!cp.nil())
+			{
+			librdf_uri* p =	::librdf_new_uri_from_uri(cp.ptr());
+			VERIFY(p!=0);
+			reset(p);
+			}
+		reset_world(cp.world());
 		}
 	return *this;
 	}
@@ -97,9 +102,10 @@ std::string URI::str() const
 	return std::string((const char*)::librdf_uri_as_string (this->ptr()));
 	}
 
+/********************************************************************/
 
 
-RDFNode::RDFNode(librdf_node* ptr,bool make_a_copy):wrapper(0,true)
+RDFNode::RDFNode(const World* w,librdf_node* ptr,bool make_a_copy):world_wrapper(w,0,true)
 	{
 	if(make_a_copy && ptr!=0)
 		{
@@ -126,11 +132,11 @@ void RDFNode::copy(const RDFNode* cp)
 		
 	}
 
-RDFNode::RDFNode():wrapper(0,true)
+RDFNode::RDFNode():world_wrapper(0,0,true)
 	{
 	}
 
-RDFNode::RDFNode(const RDFNode& cp):wrapper(0,true)
+RDFNode::RDFNode(const RDFNode& cp):world_wrapper(cp.world(),0,true)
 	{
 	if(cp.nil()) return;
 	reset(::librdf_new_node_from_node(cp.ptr()));
@@ -164,14 +170,14 @@ bool RDFNode::equals(const RDFNode* other) const
 
 
 
-Resource::Resource(librdf_node* p,bool make_a_copy):RDFNode(p,make_a_copy)
+Resource::Resource(const World* w,librdf_node* p,bool make_a_copy):RDFNode(w,p,make_a_copy)
 	{
 	if(p==0) THROW("null ptr");
 	}
 
 
 
-Resource::Resource()
+Resource::Resource(const World* w):RDFNode(w,0,true)
 	{
 	}
 Resource::Resource(const Resource& cp):RDFNode(cp)
@@ -182,30 +188,19 @@ Resource::~Resource()
 	}
 		
 
-ResourceUri::ResourceUri(const char* uri):Resource( ::librdf_new_node_from_uri_string(World::instance()->ptr(),(cucharPtr)uri) ,false)
-	{
-	ptr();
-	}
-ResourceUri::ResourceUri(cucharPtr uri):Resource( ::librdf_new_node_from_uri_string(World::instance()->ptr(),uri) ,false)
-	{
-	ptr();
-	}
 
-ResourceUri::ResourceUri(const World* w,const char* uri):Resource( ::librdf_new_node_from_uri_string(w->ptr(),(cucharPtr)uri) ,false)
+
+ResourceUri::ResourceUri(const World* w,const char* uri):Resource(w,::librdf_new_node_from_uri_string(w->ptr(),(cucharPtr)uri) ,false)
 	{
 	ptr();
 	}
-ResourceUri::ResourceUri(const World* w,cucharPtr uri):Resource( ::librdf_new_node_from_uri_string(w->ptr(),uri) ,false)
+ResourceUri::ResourceUri(const World* w,cucharPtr uri):Resource(w, ::librdf_new_node_from_uri_string(w->ptr(),uri) ,false)
 	{
 	ptr();
 	}
 
 
-ResourceUri::ResourceUri(librdf_node* p,bool make_a_copy):Resource(p,make_a_copy)
-			{
-			}
-
-ResourceUri::ResourceUri():Resource( )
+ResourceUri::ResourceUri():Resource(0)
 			{
 			}
 ResourceUri::~ResourceUri()
@@ -223,7 +218,7 @@ URI ResourceUri::uri() const
 	if(u==NULL) THROW("cannot get uri from "<< get());
 	 u = ::librdf_new_uri_from_uri(u);
 	if(u==NULL) THROW("cannot copy uri");
-	URI u2(u);
+	URI u2(World::instance(),u);
 	return u2;
 	}
 
@@ -241,43 +236,25 @@ std::string ResourceUri::str() const
 
 
 
-Literal::Literal(librdf_node* p,bool make_a_copy):RDFNode(p,make_a_copy)
-	{
-	if(p==0) THROW("null ptr");
-	}
 
-Literal::Literal(const World* w,const char* text):RDFNode(::librdf_new_node_from_literal (w->ptr(),(cucharPtr)text,NULL, 0) ,false)
+Literal::Literal(const World* w,const char* text):RDFNode(w,::librdf_new_node_from_literal (w->ptr(),(cucharPtr)text,NULL, 0) ,false)
 	{
 	}
-Literal::Literal(const World* w,cucharPtr text):RDFNode(::librdf_new_node_from_literal (w->ptr(),text,NULL, 0) ,false)
-	{
-	ptr();
-	}
-Literal::Literal(const char* text):RDFNode(::librdf_new_node_from_literal (World::instance()->ptr(),(cucharPtr)text,NULL, 0) ,false)
-	{
-	ptr();
-	}
-Literal::Literal(cucharPtr text):RDFNode(::librdf_new_node_from_literal (World::instance()->ptr(),text,NULL, 0) ,false)
+Literal::Literal(const World* w,cucharPtr text):RDFNode(w,::librdf_new_node_from_literal (w->ptr(),text,NULL, 0) ,false)
 	{
 	ptr();
 	}
 
 
 #define DECLARE_LITERAL(TYPE,XSD) \
-Literal::Literal(const World* w,TYPE data):RDFNode() \
+Literal::Literal(const World* w,TYPE data):RDFNode(w,0,true) \
 	{ \
 	URI uri(w,(ucharPtr)"http://www.w3.org/2001/XMLSchema#" XSD);\
 	std::ostringstream os; os << data; std::string s(os.str()); \
 	reset(::librdf_new_node_from_typed_literal(w->ptr(),(cucharPtr)s.c_str(),NULL,uri.ptr())); \
 	ptr(); \
-	} \
-Literal::Literal(TYPE data):RDFNode() \
-	{ \
-	URI uri(World::instance(),(ucharPtr)"http://www.w3.org/2001/XMLSchema#" XSD);\
-	std::ostringstream os; os << data; std::string s(os.str()); \
-	reset(::librdf_new_node_from_typed_literal(World::instance()->ptr(),(cucharPtr)s.c_str(),NULL, uri.ptr())); \
-	ptr(); \
-	}
+	} 
+
 DECLARE_LITERAL(double,"double")
 DECLARE_LITERAL(float,"float")
 DECLARE_LITERAL(int,"int")
@@ -317,23 +294,26 @@ Literal& Literal::operator=(const Literal& cp)
 	}
 
 
-Statement::Statement():_s(0),_p(0),_o(0)
+Statement::Statement():_w(0),_s(0),_p(0),_o(0)
 			{
 			}
-Statement::Statement(const Resource* s,const Resource* p,const RDFNode* o):
+Statement::Statement(const World* w,const Resource* s,const Resource* p,const RDFNode* o):
+				_w((World*)w),
 				_s((Resource*)(s==0?0:s->clone())),
 				_p((Resource*)(p==0?0:p->clone())),
 				_o(o==0?0:o->clone())
 			{
 			WHERE( (_s->str()) << ";" << (_p->str()) << ";" << (_o->str()));
 			}
-Statement::Statement(const Resource& s,const Resource& p,const RDFNode& o):
+Statement::Statement(const World* w,const Resource& s,const Resource& p,const RDFNode& o):
+				_w((World*)w),
 				_s((Resource*)s.clone()),
 				_p((Resource*)p.clone()),
 				_o(o.clone())
 			{
 			}
 Statement::Statement(const Statement& cp):
+				_w((World*)cp._w),
 				_s((Resource*)(cp._s==0?0:cp._s->clone())),
 				_p((Resource*)(cp._p==0?0:cp._p->clone())),
 				_o(cp._o==0?0:cp._o->clone())
@@ -348,6 +328,7 @@ Statement::Statement(const Statement& cp):
 				if(_s!=0) delete _s;
 				if(_p!=0) delete _p;
 				if(_o!=0) delete _o;
+				_w = cp._w;
 				_s = (Resource*)(cp._s==0?0:cp._s->clone());
 				_p = (Resource*)(cp._p==0?0:cp._p->clone());
 				_o = (cp._o==0?0:cp._o->clone());

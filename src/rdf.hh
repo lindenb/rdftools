@@ -17,7 +17,7 @@ typedef const ucharPtr cucharPtr;
 
 #define WHERE(a) do { std::cerr<<"["<<__FILE__<<":" << __LINE__<<"]:" << a << std::endl; } while(0);
 #define THROW(a) do {  std::ostringstream _os; _os <<"["<<__FILE__<<":" << __LINE__<<"]:" << a ; std::string _s(_os.str()); std::cerr << _s << std::endl; throw std::runtime_error(_s); }while(0)
-
+#define VERIFY(a) do { if(!(a)) THROW("assertion failed");} while(0)
 
 
 template<typename T>
@@ -68,6 +68,42 @@ class wrapper
 			}
 	};
 	
+class World;
+
+template<typename T>
+class world_wrapper : public wrapper<T>
+	{
+	protected:
+		const World* _w;
+		void reset_world(const World* w)
+			{
+			this->_w = w;
+			}
+	public:
+		world_wrapper():wrapper<T>(0),_w(0)
+			{
+			}
+
+		world_wrapper(const World* w,T* t):wrapper<T>(t),_w(w)
+			{
+			}
+		
+		world_wrapper(const World* w,T* t,bool nilleable):wrapper<T>(t,nilleable),_w(w)
+			{
+			}
+		
+		virtual  ~world_wrapper()
+			{
+			}
+		
+		const World* world() const
+			{
+			return _w;
+			}
+	};
+	
+
+
 
 class Storage;
 class URI;
@@ -80,10 +116,6 @@ class World: public wrapper<librdf_world>
 	public:
 		World();
 		virtual ~World();
-		virtual URI uri(const ucharPtr url);
-		virtual Literal literal(const ucharPtr string, const char * xml_language, int is_wf_xml) const;
-		virtual Literal literal(const ucharPtr string) const;
-		virtual ResourceUri resource(const ucharPtr uri) const;
 		static World* instance();
 	friend class Storage;
 	friend class URI;
@@ -95,16 +127,14 @@ class World: public wrapper<librdf_world>
 
 
 
-class URI: public wrapper<librdf_uri>
+class URI: public world_wrapper<librdf_uri>
 	{
 	private:
-		 URI(librdf_uri *uri);
+		void init(const World* w,const ucharPtr url);
 	public:
-
-		URI(const ucharPtr url);
-		URI(const char* url);
-		
+		URI(const World* w,librdf_uri* p);
 		URI(const World* w,const ucharPtr url);
+		URI(const World* w,const char* url);
 		URI();
 		URI(const URI& cp);
 		virtual ~URI();
@@ -127,10 +157,10 @@ inline std::ostream& operator<<(std::ostream& out, const URI& o)
 
 
 
-class RDFNode: public wrapper<librdf_node>
+class RDFNode: public world_wrapper<librdf_node>
 	{
 	protected:
-		RDFNode(librdf_node* ptr,bool make_a_copy);
+		RDFNode(const World* w,librdf_node* ptr,bool make_a_copy);
 		void copy(const RDFNode* cp) ;
 		RDFNode();
 	public:
@@ -151,8 +181,8 @@ class RDFNode: public wrapper<librdf_node>
 class Resource : public RDFNode
 	{
 	protected:
-		Resource(librdf_node* p,bool make_a_copy);
-		Resource();
+		Resource(const World* w,librdf_node* p,bool make_a_copy);
+		Resource(const World* w);
 	public:
 		Resource(const Resource& cp);
 		virtual ~Resource();
@@ -168,8 +198,8 @@ class ResourceUri : public Resource
 	public:
 		ResourceUri(const World* w,const char* uri);
 		ResourceUri(const World* w,cucharPtr uri);
-		ResourceUri(const char* uri);
-		ResourceUri(cucharPtr uri);
+		//ResourceUri(const char* uri);
+		//ResourceUri(cucharPtr uri);
 		ResourceUri();
 		virtual ~ResourceUri();
 		virtual ResourceUri& operator=(const ResourceUri& cp);
@@ -189,8 +219,7 @@ inline std::ostream& operator<<(std::ostream& out, const ResourceUri& o)
 	}
 
 #define DECLARE_LITERAL(TYPE) \
-		Literal(const World* w,TYPE data);\
-		Literal(TYPE data)
+		Literal(const World* w,TYPE data)
 
 /* http://iconocla.st/hacks/query/redland-0.9.15/docs/api/ */
 class Literal : public RDFNode
@@ -201,8 +230,8 @@ class Literal : public RDFNode
 		Literal();
 		Literal(const World* w,const char* text);
 		Literal(const World* w,cucharPtr text);
-		Literal(const char* text);
-		Literal(cucharPtr text);
+		//Literal(const char* text);
+		//Literal(cucharPtr text);
 		DECLARE_LITERAL(double);
 		DECLARE_LITERAL(float);
 		DECLARE_LITERAL(int);
@@ -229,16 +258,19 @@ inline std::ostream& operator<<(std::ostream& out, const Literal& o)
 	return out;
 	}
 
+
+
 class Statement
 	{
 	private:
+		World* _w;
 		Resource* _s;
 		Resource* _p;
 		RDFNode* _o;
 	public:
 		Statement();
-		Statement(const Resource* s,const Resource* p,const RDFNode* o);
-		Statement(const Resource& s,const Resource& p,const RDFNode& o);
+		Statement(const World* w,const Resource* s,const Resource* p,const RDFNode* o);
+		Statement(const World* w,const Resource& s,const Resource& p,const RDFNode& o);
 		Statement(const Statement& cp);
 		Statement& operator=(const Statement& cp);
 		bool operator==(const Statement& cp) const;
@@ -319,11 +351,12 @@ class Parser: public wrapper< librdf_parser>
 			}
 			
 	};
-class StmtIterator: public wrapper<librdf_stream>
+class StmtIterator: public world_wrapper<librdf_stream>
 	{
 	public:
-		StmtIterator():wrapper( librdf_new_empty_stream(World::instance()->ptr()),false);
+		StmtIterator(World* w):world_wrapper(w,::librdf_new_empty_stream(w->ptr()))
 			{
+			VERIFY(!nil());
 			}
 		virtual ~StmtIterator()
 			{
@@ -335,18 +368,19 @@ class StmtIterator: public wrapper<librdf_stream>
 			}
 		Statement next() const
 			{
-			if( librdf_stream_next (ptr())!=0) THROW("cannot move");
-			return ::librdf_stream_end (ptr());
+			if( ::librdf_stream_next (ptr())!=0) THROW("cannot move");
+			Statement x;
+			return x;//TODO
 			}
 	};
 
 
-class Model : public wrapper<librdf_model>
+class Model : public world_wrapper<librdf_model>
 	{
 	protected:
 		librdf_storage* storage;
 	
-		Model():wrapper(0,true),storage(0)
+		Model(const World* w):world_wrapper(w,0,true),storage(0)
 			{
 			}
 		
@@ -369,11 +403,59 @@ class Model : public wrapper<librdf_model>
 		 	return x;
 		 	}
 	public:
-		virtual ~Model()
+	
+	
+			virtual ~Model()
 			{
 			if(!nil()) librdf_free_model(ptr());
 			if(storage!=0) librdf_free_storage(storage);
 			}
+			
+        class iterator
+        {
+            public:
+            	typedef Statement T;
+                typedef iterator self_type;
+                typedef T value_type;
+                typedef T& reference;
+                typedef T* pointer;
+                typedef std::forward_iterator_tag iterator_category;
+                typedef int difference_type;
+                iterator(pointer ptr) : ptr_(ptr) { }
+                self_type operator++() { self_type i = *this; ptr_++; return i; }
+                self_type operator++(int junk) { ptr_++; return *this; }
+                reference operator*() { return *ptr_; }
+                pointer operator->() { return ptr_; }
+                bool operator==(const self_type& rhs) { return ptr_ == rhs.ptr_; }
+                bool operator!=(const self_type& rhs) { return ptr_ != rhs.ptr_; }
+            private:
+                pointer ptr_;
+        };
+
+        class const_iterator
+        {
+            public:
+            	typedef const Statement T;
+                typedef const_iterator self_type;
+                typedef T value_type;
+                typedef T& reference;
+                typedef T* pointer;
+                typedef int difference_type;
+                typedef std::forward_iterator_tag iterator_category;
+                const_iterator(pointer ptr) : ptr_(ptr) { }
+                self_type operator++() { self_type i = *this; ptr_++; return i; }
+                self_type operator++(int junk) { ptr_++; return *this; }
+                const reference operator*() { return *ptr_; }
+                const pointer operator->() { return ptr_; }
+                bool operator==(const self_type& rhs) { return ptr_ == rhs.ptr_; }
+                bool operator!=(const self_type& rhs) { return ptr_ != rhs.ptr_; }
+            private:
+                pointer ptr_;
+        };
+
+
+
+
 		int size() const
 			{
 			return ::librdf_model_size(ptr());
@@ -404,18 +486,18 @@ class Model : public wrapper<librdf_model>
 		
 		virtual void add(const char* s, const char* p, const char* o)
 			{
-			ResourceUri _s(s);
-			ResourceUri _p(p);
+			ResourceUri _s(world(),s);
+			ResourceUri _p(world(),p);
 			if(strstr(o,"://")==NULL)
 				{
-				Literal _o(o);
-				Statement stmt(_s,_p,_o);
+				Literal _o(world(),o);
+				Statement stmt(world(),_s,_p,_o);
 				add(stmt);
 				}
 			else
 				{
-				ResourceUri _o(o);
-				Statement stmt(_s,_p,_o);
+				ResourceUri _o(world(),o);
+				Statement stmt(world(),_s,_p,_o);
 				add(stmt);
 				}
 			}
@@ -429,10 +511,10 @@ class FileModel : public Model
 	private:
 		std::string filename;
 	public:
-		FileModel(const char* filename):Model(),filename(filename)
+		FileModel(const World* w,const char* filename):Model(w),filename(filename)
 			{
-			this->storage=librdf_new_storage(World::instance()->ptr(), "file", filename, NULL);
-			reset(::librdf_new_model(World::instance()->ptr(), storage, NULL));
+			this->storage=librdf_new_storage(w->ptr(), "file", filename, NULL);
+			reset(::librdf_new_model(w->ptr(), storage, NULL));
 			ptr();
 			}
 		virtual ~FileModel()

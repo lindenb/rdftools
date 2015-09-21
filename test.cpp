@@ -6,22 +6,23 @@ using namespace rdf;
 
 int main(int argc,char** argv)
 	{
-	URI u("http://google.com");
+	World w;
+	URI u(&w,"http://google.com");
 	cout << u << endl;
-	ResourceUri x("http://google.com");
-	ResourceUri p("http://predicate.com");
+	ResourceUri x(&w,"http://google.com");
+	ResourceUri p(&w,"http://predicate.com");
 	cout << x << endl;
-	Literal m("Hello");
+	Literal m(&w,"Hello");
 	cout << m << endl;
-	Literal n(2);
+	Literal n(&w,2);
 	cout << n << endl;
-	Statement stmt(&x,&p,&n);
+	Statement stmt(&w,&x,&p,&n);
 	cout << stmt << endl;
-	FileModel rdfFile("jeter.rdf");
+	FileModel rdfFile(&w,"jeter.rdf");
 	for(int i=0;i< 10;++i)
 		{
-		Literal n3(i);
-		Statement stmt2(x,p,n3);
+		Literal n3(&w,i);
+		Statement stmt2(&w,x,p,n3);
 		rdfFile.add(stmt2);
 		rdfFile.add("http://wikipedia.org", "http://x","http://google.com");
 		}
